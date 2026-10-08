@@ -1,0 +1,26 @@
+name: Diagnose map tiles
+on:
+  push:
+    branches: [diag-maptiler]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe map servers
+        run: |
+          KEY=B6m4DQknxd9wZ70DnDV4
+          TJ="https://api.maptiler.com/tiles/v3-openmaptiles/tiles.json?key=$KEY"
+          TILE="https://api.maptiler.com/tiles/v3-openmaptiles/14/13829/7720.pbf?key=$KEY"
+          probe() { # label url [origin]
+            if [ -n "$3" ]; then H=(-H "Origin: $3" -H "Referer: $3/"); else H=(); fi
+            CODE=$(curl -s -o body.bin -w "%{http_code}" "${H[@]}" "$2")
+            BODY=$(head -c 160 body.bin | tr -c '[:print:]' ' ')
+            echo "::notice::$1 -> HTTP $CODE, $(wc -c < body.bin) bytes: $BODY"
+          }
+          probe "tilejson no-origin" "$TJ"
+          probe "tilejson origin=https://localhost" "$TJ" "https://localhost"
+          probe "tilejson origin=https://example.trycloudflare.com" "$TJ" "https://example.trycloudflare.com"
+          probe "tile no-origin" "$TILE"
+          probe "tile origin=https://localhost" "$TILE" "https://localhost"
+          probe "sprite" "https://maputnik.github.io/osm-liberty/sprites/osm-liberty.json"
+          probe "glyphs" "https://orangemug.github.io/font-glyphs/glyphs/Roboto%20Regular/0-255.pbf"
