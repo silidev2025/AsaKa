@@ -6,21 +6,13 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe map servers
+      - name: Probe OpenFreeMap
         run: |
-          KEY=B6m4DQknxd9wZ70DnDV4
-          TJ="https://api.maptiler.com/tiles/v3-openmaptiles/tiles.json?key=$KEY"
-          TILE="https://api.maptiler.com/tiles/v3-openmaptiles/14/13829/7720.pbf?key=$KEY"
-          probe() { # label url [origin]
-            if [ -n "$3" ]; then H=(-H "Origin: $3" -H "Referer: $3/"); else H=(); fi
-            CODE=$(curl -s -o body.bin -w "%{http_code}" "${H[@]}" "$2")
-            BODY=$(head -c 160 body.bin | tr -c '[:print:]' ' ')
-            echo "::notice::$1 -> HTTP $CODE, $(wc -c < body.bin) bytes: $BODY"
-          }
-          probe "tilejson no-origin" "$TJ"
-          probe "tilejson origin=https://localhost" "$TJ" "https://localhost"
-          probe "tilejson origin=https://example.trycloudflare.com" "$TJ" "https://example.trycloudflare.com"
-          probe "tile no-origin" "$TILE"
-          probe "tile origin=https://localhost" "$TILE" "https://localhost"
-          probe "sprite" "https://maputnik.github.io/osm-liberty/sprites/osm-liberty.json"
-          probe "glyphs" "https://orangemug.github.io/font-glyphs/glyphs/Roboto%20Regular/0-255.pbf"
+          CODE=$(curl -s -o tj.json -w "%{http_code}" -H "Origin: https://localhost" https://tiles.openfreemap.org/planet)
+          echo "::notice::ofm tilejson -> HTTP $CODE: $(head -c 300 tj.json | tr -c '[:print:]' ' ')"
+          TPL=$(jq -r '.tiles[0]' tj.json)
+          for zxy in 14/13829/7720 14/13830/7720 14/13829/7721 14/13830/7721; do
+            URL=${TPL/\{z\}\/\{x\}\/\{y\}/$zxy}
+            CODE=$(curl -s --compressed -o t.pbf -w "%{http_code}" -H "Origin: https://localhost" "$URL")
+            echo "::notice::ofm tile $zxy -> HTTP $CODE, $(wc -c < t.pbf) bytes, building layer: $(grep -c -a 'building' t.pbf), render_height: $(grep -c -a 'render_height' t.pbf), cors: $(curl -s -I -H 'Origin: https://localhost' "$URL" | grep -i 'access-control-allow-origin' | tr -d '\r')"
+          done
